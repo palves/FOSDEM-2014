@@ -1,0 +1,61 @@
+/* Copyright (C) 2014 Pedro Alves
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+digraph G {
+	graph [splines=polyline]
+	node [shape=record, style="filled", color=white, fillcolor=lightgrey];
+
+	start [label="WORLD DOMINATION", style="filled", color=lightgrey, fillcolor=black, fontcolor=white]
+
+	local_remote_parity  [label="Local/Remote feature parity"]
+
+	itsets [label="I/T sets"]
+
+	th_groups  [label="Finer grained control of threads"]
+
+	all_stop_non_stop  [label="All-stop on top of non-stop"]
+
+	non_stop [label="Target can non-stop (done)"]
+
+	target_async [label="Target can async (done)"]
+
+	async_by_default [label="Async by default"]
+
+	multi_process [label="Multi-process"]
+	multi_target [label="Multi-target"]
+
+	{
+		rank=same ;
+		itsets ;
+		async_by_default;
+		local_remote_parity;
+		multi_target;
+		multi_process;
+	}
+
+	itsets -> th_groups -> all_stop_non_stop -> non_stop -> target_async;
+
+	async_by_default -> target_async
+
+	multi_target -> target_async
+
+	start -> itsets;
+	start -> local_remote_parity;
+	start -> multi_target;
+	start -> multi_process;
+	start -> async_by_default
+
+	INCLUDE
+}

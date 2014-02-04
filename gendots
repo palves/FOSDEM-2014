@@ -1,0 +1,15 @@
+#!/bin/bash
+
+node=$1
+input=$2
+output=$3
+
+ATTRIB=[fillcolor=red];
+
+cat > ${output}.tmp << END
+/* *INDENT-OFF* */ /* THIS FILE IS GENERATED -*- buffer-read-only: t -*- */
+/* vi:set ro: */
+END
+
+sed "s/INCLUDE/${node} ${ATTRIB}/" < ${input} >> ${output}.tmp
+mv ${output}.tmp ${output}

@@ -1,0 +1,647 @@
+# Copyright (C) 2014 Pedro Alves
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#
+#+TITLE:     GDB, so where are we now?
+#+AUTHOR:    Pedro Alves
+#+EMAIL:     palves@redhat.com
+#+DATE:      2014-02-02 Sun
+#+DESCRIPTION:
+#+KEYWORDS:
+#+LANGUAGE:  en
+#+OPTIONS:   H:3 num:t toc:t \n:nil @:t ::t |:t ^:t -:t f:t *:t <:t
+#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil tags:not-in-toc
+#+INFOJS_OPT: view:nil toc:nil ltoc:t mouse:underline buttons:0 path:http://orgmode.org/org-info.js
+#+EXPORT_SELECT_TAGS: export
+#+EXPORT_EXCLUDE_TAGS: noexport
+#+LINK_UP:
+#+LINK_HOME:
+
+#+startup: beamer
+#+LaTeX_CLASS: beamer
+#+LaTeX_CLASS_OPTIONS: [bigger]
+
+#+BEAMER_HEADER_EXTRA:  \institute{Red Hat}
+
+#+BEAMER_FRAME_LEVEL: 2
+
+#+COLUMNS: %40ITEM %10BEAMER_env(Env) %9BEAMER_envargs(Env Args) %4BEAMER_col(Col) %10BEAMER_extra(Extra)
+
+#+latex_header: \mode<beamer>{\usetheme{Madrid}}
+#+latex_header: \AtBeginSection[]{\begin{frame}<beamer>\frametitle{Topic}\tableofcontents[currentsection]\end{frame}}
+#+latex_header: \subtitle{Status of GDB's ongoing target and run control projects.}
+
+#+LATEX: \newcommand{\includehfigure}[1]{\begin{figure} \includegraphics[height=0.8\textheight]{#1} \end{figure}}
+#+LATEX: \newcommand{\includewfigure}[1]{\begin{figure} \includegraphics[width=\textwidth]{#1} \end{figure}}
+
+* Introduction
+
+** License
+
+- License: Attribution-ShareAlike 4.0 Unported (CC BY-SA 4.0)
+- http://creativecommons.org/licenses/by-sa/4.0/
+
+** Current mess
+
+- set non-stop on/off
+- set target-async on/off
+- set scheduler-locking on/of/step
+- set schedule-multiple on/off
+
+- 'target remote' vs 'target extended-remote'
+
+** Where we're headed
+
+#+LATEX: \includehfigure{dot/world_domination.pdf}
+
+* GDBserver
+** GDBserver, what's that?
+
+- For native/local debugging on the host, GDB alone is sufficient.
+ - spawn processes ("run")
+ - attach to existing processes
+
+** GDBserver, how's that?
+
+- For @remote@ / cross debugging, GDB connects to something on the
+  target end.
+
+#+begin_src ditaa :file gdb-rsp-gdbserver.png :cmdline -s 10
+ +---------+         +---------------+
+ |cBLU     |   RSP   | cGRE          |
+ |   GDB   |<------->| Remote target |
+ |         |         |               |
+ +---------+         +---------------+
+#+end_src
+
+ - bare metal embedded systems \rightarrow remote stub, debug probe.
+ - emulators \rightarrow builtin RSP implementation
+ - GNU/Linux (and others) \rightarrow the @GDBserver@ program.
+
+** GDBserver, basic usage
+
+*** GDBserver								    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+#+begin_example
+$ gdbserver :9999 a.out
+Process /tmp/a.out created; pid = 22952
+Listening on port 9999
+#+end_example
+
+*** GDB								    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+#+begin_example
+$ gdb /tmp/a.out
+Reading symbols from /tmp/a.out...done.
+(gdb) target remote :9999
+Remote debugging using :9999
+0x000000323d001530 in _start () from \
+    /lib64/ld-linux-x86-64.so.2
+(gdb)
+#+end_example
+
+
+* Remote Serial Protocol
+
+** Remote Serial Protocol (RSP)
+
+ - <+-> Client/Server model
+  - GDB == Client
+   - runs on the host
+  - Target == Server
+
+ - <+-> Variety of transports
+  - Serial
+  - TCP/IP
+  - UDP/IP
+  - POSIX pipes
+
+** Remote Serial Protocol (RSP)
+
+ - <+-> (Mostly) text-based
+   1. \Rightarrow =m aa55aa55,4=      (read 4 bytes at 0xaa55aa55)
+   2. \Leftarrow =ff00ff00=           (here's your bytes)
+
+   1. \Rightarrow =Z0 0x1234=          (insert breakpoint at 0x1234)
+   2. \Leftarrow =OK=
+
+   - Frame format:
+
+     '$' packet-data '#' checksum
+
+ - Try '(gdb) set debug remote 1' to see all the RSP traffic.
+
+ https://sourceware.org/gdb/onlinedocs/gdb/Remote-Protocol.html
+
+
+* Local vs remote feature parity
+
+#+LATEX: \includehfigure{dot/world_domination-local_remote_parity.pdf}
+
+** Local vs remote debugging
+
+- Should be transparent, right?
+
+** I wish it were so
+
+*** Local/Remote feature set comparison 				    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+    #+ATTR_LATEX: width=\textwidth
+    [[file:inkscape/gdb-vs-gdbserver.pdf]]
+
+*** hidden						    :B_ignoreheading:
+    :PROPERTIES:
+    :BEAMER_env: ignoreheading
+    :END:
+
+** GDBserver, in blocks
+
+#+LATEX: \includewfigure{inkscape/gdb-modules-highlight-rsp-and-native.pdf}
+
+** Surprise, we love code duplication
+
+ - <+-> GDBserver's native target code != GDB's native target code
+
+  [[file:inkscape/gdb-modules-highlight-native.pdf]]
+
+** Bright idea
+
+- Gosh, we could share all that code, couldn't we?
+
+** GDBserver-only features
+
+- tracepoints
+
+- fast tracepoints / in-process agent (IPA)
+
+- can access memory of running thread
+
+- other libcs (uCLinux/uClibc, Android, etc.)
+
+ - static =libthread_db.a=, no =libthread_db= at all.
+
+- misc others
+
+** Native-only features, part 1
+
+- fork/vfork/exec
+ - set follow-fork-mode (child/parent)
+ - catch fork/vfork/exec
+
+- catch syscall
+
+- '(gdb) set environment FOO=bar'
+
+- set inferior cwd
+ - (gdb) cd \/somewhere\/
+ - (gdb) pwd
+
+** Native-only features, part 2
+
+- use shell to start program (globbing, wildcard expansion and I/O redirection)
+
+*** Native							    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+#+begin_example
+$ gdb /usr/bin/ls
+(gdb) run *
+Starting program: /usr/bin/ls *
+1  2
+[Inferior 1 (process 4750) exited normally]
+#+end_example
+
+*** GDBserver							    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+#+begin_example
+Process /usr/bin/ls created; pid = 5260
+/usr/bin/ls: cannot access *: No such file or directory
+Child exited with status 2
+#+end_example
+
+** Native-only features, part 3
+
+- GDB can set/show (user defined) thread names:
+
+*** Thread names 						  :B_example:
+    :PROPERTIES:
+    :BEAMER_env: example
+    :END:
+
+#+LATEX: \small
+
+#+begin_example
+ (gdb) info threads
+   Id   Target Id                         Frame
+ * 1    Thread 0x77fc9740 (LWP 932) "foo" main () at foo.c:29
+                                     ^^^
+ (gdb) thread name bar
+                   ^^^
+ (gdb) info threads
+   Id   Target Id                         Frame
+ * 1    Thread 0x77fc9740 (LWP 932) "bar" main () at foo.c:29
+                                     ^^^
+ (gdb)
+#+end_example
+
+#+LATEX: \normalsize
+
+** Yet more missing features when remote debugging
+
+- Others:
+ - Attach auto-load exec
+ - Graceful handling of leader thread exiting
+ - Inferior IO
+
+- More...
+
+** Other differences
+
+- Synching inferior thread list needs explicit "info threads".
+
+- "info threads" output different between native/remote:
+
+*** GDB								    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+
+#+begin_example
+(gdb) info threads
+   Id   Target Id         Frame
+ * 1    Thread 0x7ffff7fcc740 (LWP 19056) "test" main ()
+          at test.c:35
+#+end_example
+
+*** GDBserver
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+#+begin_example
+ (gdb) info threads
+   Id   Target Id         Frame
+ * 1    Thread 19056      main () at test.c:35
+#+end_example
+
+** Current direction
+
+1. GDBserver > GDB (targets backends)
+2. Drop GDB's backends
+
+#+LATEX: \vspace*{3\baselineskip}
+
+- Project is tracked here:
+
+  https://sourceware.org/gdb/wiki/LocalRemoteFeatureParity
+
+- Related:
+
+  https://sourceware.org/gdb/wiki/Common
+
+
+* I/t sets
+
+#+LATEX: \includehfigure{dot/world_domination-itsets.pdf}
+
+** inferior/thread sets, history 1
+
+Currently GDB can debug:
+ - multi-threaded programs
+ - programs composed of multiple processes
+
+#+LATEX: \vspace*{3\baselineskip}
+
+By default:
+  - any event triggers in the debugged program \Rightarrow all threads stop
+
+** inferior/thread sets, history 2
+
+Too intrusive when debugging live running systems
+
+- Enter non-stop mode (GDB 7.0)
+ - Keep all threads running, except the thread that hit the event
+
+#+LATEX: \vspace*{3\baselineskip}
+[The old (and default) mode was named the =all-stop= mode]
+
+** inferior/thread sets, history 3
+
+All or nothing...
+ - Not flexible enough.
+#+LATEX: \vspace*{3\baselineskip}
+
+Desirable to group related threads, and apply group actions, e.g.:
+ - step, continue, etc.
+ - set breakpoints specific to said groups or sets
+ - specify what should be implicitly paused when a breakpoint triggers
+
+** inferior/thread sets, specs
+
+   - collection/combination of execution/scoping objects:
+     - inferiors/processes, threads, cores, Ada tasks, etc.
+   - ranges and wildards
+   - assignable names
+   - union (,) and intersection (.) operators
+   - set negation (~)
+   - refer to current and/or future entities
+   - predefined sets:
+     - all threads, all running, all stopped, etc.
+
+*** a spec							  :B_example:
+    :PROPERTIES:
+    :BEAMER_env: example
+    :END:
+
+'stopped.i2.c3-5,t3'
+
+  - every thread of inferior 2, running on cores 3 to 5, but actually
+    stopped
+  - plus thread 3
+
+** inferior/thread sets specs, examples
+
+ [scope TRIGGER-SET] break [-stop STOP-SET] LINESPEC
+
+#+begin_example
+  (gdb) scope t3 break -stop i1 main
+#+end_example
+
+#+begin_example
+  (gdb) all> scope i1
+  Current scope is inferior 1.
+  (gdb) i1>
+#+end_example
+
+#+begin_example
+(gdb) all> step
+(gdb) i1> step
+(gdb) t1> step
+(gdb) i1> step -p t2,t3
+(gdb) i1> step -p c1
+(gdb) i1> scope i1,i2 step
+#+end_example
+
+* All-stop vs non-stop modes
+
+
+#+LATEX: \includehfigure{dot/world_domination-non_stop.pdf}
+
+
+** all-stop vs non-stop modes
+
+- user-visible differences
+- target-side / RSP differences
+
+** all-stop vs non-stop modes, user visible differences
+
+Different user-visible behavior:
+
+- All-stop always stops all threads
+- Non-stop leaves threads running
+
+\hrulefill
+
+- All-stop always switches current thread to thread that last stopped
+- Non-stop never switches the current thread
+
+\hrulefill
+
+- In non-stop, resumption commands only apply to the current thread,
+  unless explicitly overriden
+- In all-stop, what's resumed depends on the =scheduler-locking=
+  setting (and more).
+
+** all-stop vs non-stop modes, target backend / RSP differences
+*** In @all-stop@ RSP, resumes are @synchronous/blocking@ 	    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+
+1. <+-> \rightarrow =vCont;c=             (continue)
+2. <2-> *(program continues)*
+3. <3-> \leftarrow =T05 ... ;thread:999=                  (stopped with SIGTRAP)
+
+*** Underneath						    :B_ignoreheading:
+    :PROPERTIES:
+    :BEAMER_env: ignoreheading
+    :END:
+
+- <4-> @Can't send another packet while the program is running.@
+ - <4-> Can't insert/remove breakpoints
+ - <4-> Can't list threads
+ - <4-> Can't inspect globals
+ - <4-> Can @only@ explicitly stop target
+  - <4-> interrupt request byte =0x03= (no packet structure)
+- <4-> Or ... wait for the target to stop itself
+
+** Non-stop RSP, asynchronous notifications
+
+Asynchronous notifications!
+
+ - Initiated by the server
+ - Can be sent at any time, even when target is running
+ - Just like other packets but start with '%' instead of '$' \newline (at the frame level)
+ - Currently defined:
+  - %Stop: <regular stop reply here>
+
+** Non-stop resumptions					    :B_ignoreheading:
+
+- In the @non-stop@ RSP variant, resumes are @asynchronous@
+#+LATEX: \pause
+- Other RSP traffic possible while the target is running!
+#+LATEX: \pause
+
+*** insert breakpoint while program is running 						  :B_example:
+    :PROPERTIES:
+    :BEAMER_env: example
+    :END:
+
+1. <+-> \rightarrow =vCont;c=          (continue all threads)
+1. <+-> \leftarrow =OK=                             (immediate reply) *(program continues)*
+1. <+-> \rightarrow =Z0 <addr1>=                 (Insert breakpoint)
+1. <+-> \leftarrow =OK=
+1. <+-> *(program eventually hits breakpoint)*
+1. <+-> \leftarrow =%Stop:T05 ... ;thread:999=              (stopped with SIGTRAP)
+* All-stop UI on top of non-stop target
+
+#+LATEX: \includehfigure{dot/world_domination-all_stop_non_stop.pdf}
+
+** All-stop UI on top of non-stop target
+
+What:
+- always connect using the non-stop RSP variant
+- present the all-stop behavior to the user
+
+Why:
+- Just one specific case in an i/t sets world -- useful as incremental
+  milestone.
+- Allows true remote async
+
+* Target async by default
+
+
+#+LATEX: \includehfigure{dot/world_domination-async_by_default.pdf}
+
+** sync mode (what we always had by default)
+
+#+LATEX: \includehfigure{dia/gdb-sync-event-loop.pdf}
+
+** async mode (not the default yet)
+
+#+LATEX: \includehfigure{dia/gdb-async-event-loop.pdf}
+
+** async mode (not the default yet)
+
+#+LATEX: \small
+
+#+begin_example
+ (gdb) c&
+ Asynchronous execution not supported on this target.
+ (gdb) set target-async on
+ info threads 
+   Id   Target Id     Frame 
+   3    Thread 11457  0x004ba6ed in foo () at foo.c:82
+   2    Thread 11456  0x004ba6ed in foo () at foo.c:82
+ * 1    Thread 11452  0x00408e60 in bar () at bar.c:93
+ (gdb) c&
+ Continuing.
+ (gdb) info threads 
+  Id   Target Id      Frame 
+   3    Thread 11457  (running)
+   2    Thread 11456  (running)
+ * 1    Thread 11452  (running)
+ (gdb) interrupt ...
+#+end_example
+
+#+LATEX: \normalsize
+
+* Multi-process debugging
+
+#+LATEX: \includehfigure{dot/world_domination-multi_process.pdf}
+
+** multi-process debugging
+
+- Can debug several GNU/Linux programs under the same GDB session
+  since ~7.2.
+
+- Working on scalability now
+
+* Multi-target
+
+#+LATEX: \includehfigure{dot/world_domination-multi_target.pdf}
+
+** multi-target
+
+Make it possible for users to connect to multiple targets at once:
+
+- connect to multiple GDBservers at the same time
+- freely mix native, remote, and core-file debugging
+
+#+LATEX: \vspace*{3\baselineskip}
+
+https://sourceware.org/gdb/wiki/MultiTarget
+
+** multi-target
+
+- The branch is already functional
+
+- Lots of global state needed to cleaned up.  Some more to go.
+
+  | Native GNU/Linux | \checkmark         |
+  |------------------+--------------------|
+  | Core support     | \checkmark         |
+  |------------------+--------------------|
+  | Remote           | almost             |
+  |------------------+--------------------|
+  | all others....   | \text{\sffamily X} |
+
+- Target stack design
+
+- User-interface not fully baked yet
+   - add-inferior -new-target
+
+- Change GDB to handle the same PID coming from multiple targets.
+
+- Needs target-async
+   - can't block waiting for a single remote file descriptor
+
+- The usual: tests and documentation
+
+* Reverse debugging
+
+** Running programs backwards
+
+*** Commands 							    :B_block:
+    :PROPERTIES:
+    :BEAMER_env: block
+    :END:
+
+#+begin_example
+reverse-step{,stepi,next,nexti,finish}, rc, rs, rsi, rni
+#+end_example
+
+*** ignore							    :B_ignoreheading:
+    :PROPERTIES:
+    :BEAMER_env: ignoreheading
+    :END:
+
+** Running programs backwards
+
+ - w/ 'target remote' \Rightarrow target does the hard work
+  - Often simulators/emulators
+
+  - Only two packets necessary:
+    - ‘bc’ - backward continue
+    - ‘bs’ - backward step
+
+** Running programs backwards
+
+ - Built-in process record and replay
+
+  - "full" version:
+    - allows replaying and reverse execution
+    - force single-stepping, parses instructions, records effects
+    - slow
+    - single-threaded only
+    - slow
+    - x86/x86-64 GNU/Linux
+    - slow
+    - ARM GNU/Linux improved in 7.7 (syscall instruction recording, thumb32)
+
+  - Intel's branch trace (btrace) recording (GDB mainline)
+    - h/w assisted (Branch Trace Store / BTS)
+    - per-thread branch trace
+    - does not record data
+    - allows limited replay and reverse execution
+
+
+* End
+
+** End
+
+- Questions
+
+#+LATEX: \vspace*{3\baselineskip}
+
+- =<palves@redhat.com>=

@@ -1,0 +1,52 @@
+This is the source code for the following presentation:
+
+Title: GDB, so where are we now?
+Subtitle: Status of GDB's ongoing target and run control projects 
+Author: Pedro Alves
+Where: FOSDEM 2014
+When: 2014-02-02 Sun
+
+* Abstract
+
+In this talk, I will present an overview of the current state of
+several GDB projects of interest to Valgrind developers looking at
+GDB/Valgrind integration, including the current state of GDBserver in
+GDB, where we are on local vs remote feature parity, all-stop vs
+non-stop modes, multi-process and multi-target projects, reverse
+debugging, and possibly others.
+
+- current state of GDBserver in GDB
+- where we are on local vs remote feature parity
+- all-stop vs non-stop modes
+- multi-process debugging
+- multi-target projects
+- reverse debugging
+
+* License
+
+- The sources of the presentation are licensed under the GPL v3 or
+  later.  See COPYING file.
+
+- The resulting generated presentation is licensed under:
+
+  Attribution-ShareAlike 4.0 Unported (CC BY-SA 4.0)
+  http://creativecommons.org/licenses/by-sa/4.0/
+
+* Dependencies
+
+ - emacs
+ - org-beamer mode
+ - ditaa integrated with org-mode
+     http://orgmode.org/worg/org-contrib/babel/languages/ob-doc-ditaa.html
+ - inkscape
+ - dia
+
+* How to build
+
+ - Just type make.
+
+* Contact
+
+ Pedro Alves
+  palves@redhat.com
+  alves.ped@gmail.com
